@@ -1,0 +1,140 @@
+{
+  "Student_Master": {
+    "TableName": "Student_Master",
+    "KeySchema": [
+      {
+        "AttributeName": "student_id",
+        "KeyType": "HASH"
+      }
+    ],
+    "AttributeDefinitions": [
+      {
+        "AttributeName": "student_id",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "rfid_uid",
+        "AttributeType": "S"
+      }
+    ],
+    "GlobalSecondaryIndexes": [
+      {
+        "IndexName": "rfid-uid-index",
+        "KeySchema": [
+          {
+            "AttributeName": "rfid_uid",
+            "KeyType": "HASH"
+          }
+        ],
+        "Projection": {
+          "ProjectionType": "ALL"
+        }
+      }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "Description": "Master table storing student information including RFID UID mapping"
+  },
+  "Entry_Log": {
+    "TableName": "Entry_Log",
+    "KeySchema": [
+      {
+        "AttributeName": "log_id",
+        "KeyType": "HASH"
+      }
+    ],
+    "AttributeDefinitions": [
+      {
+        "AttributeName": "log_id",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "date",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "student_id",
+        "AttributeType": "S"
+      }
+    ],
+    "GlobalSecondaryIndexes": [
+      {
+        "IndexName": "date-index",
+        "KeySchema": [
+          {
+            "AttributeName": "date",
+            "KeyType": "HASH"
+          }
+        ],
+        "Projection": {
+          "ProjectionType": "ALL"
+        }
+      },
+      {
+        "IndexName": "student-id-index",
+        "KeySchema": [
+          {
+            "AttributeName": "student_id",
+            "KeyType": "HASH"
+          }
+        ],
+        "Projection": {
+          "ProjectionType": "ALL"
+        }
+      }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "Description": "Table storing RFID entry logs from ESP32 devices"
+  },
+  "Final_Attendance": {
+    "TableName": "Final_Attendance",
+    "KeySchema": [
+      {
+        "AttributeName": "attendance_id",
+        "KeyType": "HASH"
+      }
+    ],
+    "AttributeDefinitions": [
+      {
+        "AttributeName": "attendance_id",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "student_id",
+        "AttributeType": "S"
+      },
+      {
+        "AttributeName": "date",
+        "AttributeType": "S"
+      }
+    ],
+    "GlobalSecondaryIndexes": [
+      {
+        "IndexName": "student-id-index",
+        "KeySchema": [
+          {
+            "AttributeName": "student_id",
+            "KeyType": "HASH"
+          }
+        ],
+        "Projection": {
+          "ProjectionType": "ALL"
+        }
+      },
+      {
+        "IndexName": "date-index",
+        "KeySchema": [
+          {
+            "AttributeName": "date",
+            "KeyType": "HASH"
+          }
+        ],
+        "Projection": {
+          "ProjectionType": "ALL"
+        }
+      }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "Description": "Table storing final computed attendance records (Present, Absent, Proxy, Bunk)"
+  }
+}
+
