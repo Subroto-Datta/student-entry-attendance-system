@@ -73,11 +73,16 @@ def lambda_handler(event, context):
             date = extract_date_from_filename(object_key)
             if not date:
                 date = datetime.now().strftime('%Y-%m-%d')
+                print(f"WARNING: Could not extract date from filename '{object_key}', using today's date: {date}")
+            else:
+                print(f"SUCCESS: Extracted date '{date}' from filename '{object_key}'")
             
-            # Extract lecture from filename or use default
+            # Extract lecture from filename or use default (must be done before using it)
             lecture = extract_lecture_from_filename(object_key)
             if not lecture:
                 lecture = f"Lecture_{datetime.now().strftime('%H:%M')}"
+            
+            print(f"Processing attendance for date: {date}, lecture: {lecture}, file: {object_key}")
             
             # Normalize column names (case-insensitive, strip whitespace)
             df.columns = df.columns.str.strip().str.lower()
@@ -157,12 +162,15 @@ def lambda_handler(event, context):
                     'attendance_id': attendance_id,
                     'student_id': student_id,
                     'rfid_uid': student_rfid,
-                    'date': date,
+                    'date': date,  # This is the date extracted from filename
                     'lecture': lecture,
                     'status': status,
                     'uploaded_file': object_key,
                     'processed_at': datetime.utcnow().isoformat() + 'Z'
                 }
+                
+                # Log the date being stored for each record
+                print(f"Storing record for student {student_id} with date: {date}, status: {status}")
                 
                 attendance_results.append(attendance_record)
             
@@ -200,15 +208,26 @@ def lambda_handler(event, context):
             attendance_results.extend(scanned_students_not_in_excel)
             
             # Store all attendance records in DynamoDB
+            dates_stored = {}
             for record in attendance_results:
                 try:
                     # Convert Python types to DynamoDB-compatible types
                     dynamo_item = json.loads(json.dumps(record), parse_float=Decimal)
+                    record_date = record.get('date', 'unknown')
+                    dates_stored[record_date] = dates_stored.get(record_date, 0) + 1
                     final_attendance_table.put_item(Item=dynamo_item)
+                    print(f"✅ Stored record {record['attendance_id']} with date: {record_date}")
                 except ClientError as e:
-                    print(f"Error storing attendance record {record['attendance_id']}: {str(e)}")
+                    print(f"❌ Error storing attendance record {record['attendance_id']}: {str(e)}")
             
+            # Log summary of dates stored
             print(f"Successfully processed {len(attendance_results)} attendance records from {object_key}")
+            print(f"Dates stored in DynamoDB: {dates_stored}")
+            if len(dates_stored) > 1:
+                print(f"⚠️ WARNING: Multiple dates found in records: {list(dates_stored.keys())}")
+            elif len(dates_stored) == 1:
+                stored_date = list(dates_stored.keys())[0]
+                print(f"✅ All records stored with date: {stored_date}")
         
         return {
             'statusCode': 200,
@@ -228,13 +247,45 @@ def lambda_handler(event, context):
         }
 
 def extract_date_from_filename(filename):
-    """Extract date from filename if present (format: YYYY-MM-DD or similar)."""
+    """Extract date from filename if present (format: YYYY-MM-DD or similar).
+    
+    Expected filename formats:
+    - uploads/2025-11-05_upload_1234567890.xlsx
+    - uploads/2025-11-05_Lecture1_1234567890.xlsx
+    """
     import re
-    date_pattern = r'(\d{4}[-/]\d{2}[-/]\d{2})'
-    match = re.search(date_pattern, filename)
+    
+    print(f"Attempting to extract date from filename: {filename}")
+    
+    # More specific patterns to match date in S3 key path
+    # Pattern 1: Date right after uploads/ and before underscore (most common)
+    # Matches: uploads/2025-11-05_anything
+    pattern1 = r'uploads/(\d{4}-\d{2}-\d{2})_'
+    match = re.search(pattern1, filename)
+    if match:
+        date_str = match.group(1)
+        print(f"Pattern 1 matched: Extracted date '{date_str}' from filename")
+        # Validate date format
+        try:
+            datetime.strptime(date_str, '%Y-%m-%d')
+            return date_str
+        except ValueError:
+            print(f"Warning: Extracted date '{date_str}' is not a valid date")
+    
+    # Pattern 2: Date anywhere in filename (YYYY-MM-DD or YYYY/MM/DD)
+    pattern2 = r'(\d{4}[-/]\d{2}[-/]\d{2})'
+    match = re.search(pattern2, filename)
     if match:
         date_str = match.group(1).replace('/', '-')
-        return date_str
+        print(f"Pattern 2 matched: Extracted date '{date_str}' from filename")
+        # Validate date format
+        try:
+            datetime.strptime(date_str, '%Y-%m-%d')
+            return date_str
+        except ValueError:
+            print(f"Warning: Extracted date '{date_str}' is not a valid date")
+    
+    print(f"Warning: Could not extract valid date from filename '{filename}'")
     return None
 
 def extract_lecture_from_filename(filename):
@@ -273,4 +324,3 @@ def fetch_all_students():
     except ClientError as e:
         print(f"Error fetching students: {str(e)}")
         return []
-

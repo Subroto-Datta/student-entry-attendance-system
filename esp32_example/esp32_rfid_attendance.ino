@@ -1,13 +1,15 @@
 /*
- * ESP32 RFID Attendance System
+ * ESP32 RFID Attendance System - AWS Integration
  * 
  * This code reads RFID tags using RC522 module and sends entry logs
- * to AWS API Gateway endpoint.
+ * to AWS API Gateway endpoint for attendance tracking.
  * 
  * Hardware:
  * - ESP32 Development Board
  * - MFRC522 RFID Reader Module
+ * - DS3231 RTC Module (for accurate timestamps)
  * - RFID Tags/Cards
+ * - Buzzer (optional, for audio feedback)
  * 
  * Connections:
  * RC522    ESP32
@@ -19,233 +21,233 @@
  * 3.3V     3.3V
  * GND      GND
  * 
+ * DS3231 RTC:
+ * SDA      GPIO 21 (I2C)
+ * SCL      GPIO 22 (I2C)
+ * VCC      5V or 3.3V
+ * GND      GND
+ * 
+ * Buzzer:
+ * +        GPIO 25
+ * -        GND
+ * 
  * Libraries Required:
  * - WiFi (built-in)
  * - HTTPClient (built-in)
  * - MFRC522 by GithubCommunity
  * - SPI (built-in)
+ * - Wire (built-in)
+ * - RTClib by Adafruit
  * 
- * Install MFRC522 library:
- * Sketch -> Include Library -> Manage Libraries -> Search "MFRC522" -> Install
+ * Setup Instructions:
+ * 1. Update WiFi credentials (ssid, password)
+ * 2. Update API_GATEWAY_URL with your AWS API Gateway endpoint
+ * 3. Upload code to ESP32
+ * 4. Ensure RTC is set to correct time (auto-set on first run)
+ * 5. Ensure students are registered in DynamoDB Student_Master table
  */
 
-#include <WiFi.h>
-#include <HTTPClient.h>
-#include <SPI.h>
-#include <MFRC522.h>
-
-// WiFi Credentials
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
-
-// AWS API Gateway Endpoint
-// Replace with your actual API Gateway URL
-const char* apiGatewayUrl = "https://YOUR-API-ID.execute-api.us-east-1.amazonaws.com/prod/entry";
-
-// RFID Module Pins
-#define SS_PIN    5   // SDA
-#define RST_PIN   4   // RST
-
-// Initialize MFRC522
-MFRC522 mfrc522(SS_PIN, RST_PIN);
-
-// Timing variables
-unsigned long lastScanTime = 0;
-const unsigned long scanInterval = 2000; // 2 seconds between scans
-
-void setup() {
-  Serial.begin(115200);
-  delay(1000);
-
-  // Initialize SPI for RFID
-  SPI.begin();
-  mfrc522.PCD_Init();
-  
-  Serial.println("RFID Reader Initialized");
-  
-  // Connect to WiFi
-  connectToWiFi();
-  
-  Serial.println("System Ready. Please scan RFID tag...");
-}
-
-void loop() {
-  // Check if a card is present
-  if (!mfrc522.PICC_IsNewCardPresent()) {
-    delay(500);
-    return;
-  }
-
-  // Select the card
-  if (!mfrc522.PICC_ReadCardSerial()) {
-    delay(500);
-    return;
-  }
-
-  // Prevent duplicate scans within interval
-  unsigned long currentTime = millis();
-  if (currentTime - lastScanTime < scanInterval) {
-    return;
-  }
-  lastScanTime = currentTime;
-
-  // Read RFID UID
-  String rfidUid = "";
-  for (byte i = 0; i < mfrc522.uid.size; i++) {
-    if (mfrc522.uid.uidByte[i] < 0x10) rfidUid += "0";
-    rfidUid += String(mfrc522.uid.uidByte[i], HEX);
-    rfidUid.toUpperCase();
-  }
-
-  Serial.print("RFID UID: ");
-  Serial.println(rfidUid);
-
-  // Get current timestamp
-  String timestamp = getCurrentTimestamp();
-  String date = getCurrentDate();
-
-  // Send to AWS API Gateway
-  sendEntryLog(rfidUid, timestamp, date);
-
-  // Halt card to prevent multiple reads
-  mfrc522.PICC_HaltA();
-  mfrc522.PCD_StopCrypto1();
-  
-  delay(1000);
-}
-
-void connectToWiFi() {
-  Serial.print("Connecting to WiFi: ");
-  Serial.println(ssid);
-  
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-    delay(500);
-    Serial.print(".");
-    attempts++;
-  }
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println();
-    Serial.println("WiFi Connected!");
-    Serial.print("IP Address: ");
-    Serial.println(WiFi.localIP());
-  } else {
-    Serial.println();
-    Serial.println("WiFi Connection Failed!");
-    Serial.println("System will retry in 10 seconds...");
-    delay(10000);
-    connectToWiFi(); // Retry
-  }
-}
-
-String getCurrentTimestamp() {
-  // Get current time from NTP or use system time
-  // For simplicity, using formatted string
-  // In production, use NTP client library for accurate time
-  
-  time_t now = time(nullptr);
-  struct tm timeinfo;
-  
-  if (!getLocalTime(&timeinfo)) {
-    // Fallback: use millis() to generate timestamp
-    return "2025-01-01T00:00:00Z";
-  }
-  
-  char timestamp[25];
-  strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
-  return String(timestamp);
-}
-
-String getCurrentDate() {
-  // Get current date
-  time_t now = time(nullptr);
-  struct tm timeinfo;
-  
-  if (!getLocalTime(&timeinfo)) {
-    return "2025-01-01";
-  }
-  
-  char date[11];
-  strftime(date, sizeof(date), "%Y-%m-%d", &timeinfo);
-  return String(date);
-}
-
-void sendEntryLog(String rfidUid, String timestamp, String date) {
-  // Check WiFi connection
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi disconnected. Reconnecting...");
-    connectToWiFi();
-    return;
-  }
-
-  HTTPClient http;
-  
-  // Prepare JSON payload
-  String payload = "{";
-  payload += "\"rfid_uid\":\"" + rfidUid + "\",";
-  payload += "\"timestamp\":\"" + timestamp + "\",";
-  payload += "\"date\":\"" + date + "\"";
-  payload += "}";
-
-  Serial.println("Sending to API Gateway...");
-  Serial.println("URL: " + String(apiGatewayUrl));
-  Serial.println("Payload: " + payload);
-
-  // Configure HTTP client
-  http.begin(apiGatewayUrl);
-  http.addHeader("Content-Type", "application/json");
-  
-  // Send POST request
-  int httpResponseCode = http.POST(payload);
-
-  // Check response
-  if (httpResponseCode > 0) {
-    Serial.print("HTTP Response code: ");
-    Serial.println(httpResponseCode);
-    
-    String response = http.getString();
-    Serial.println("Response: " + response);
-    
-    if (httpResponseCode == 200) {
-      Serial.println("Entry log sent successfully!");
-    } else {
-      Serial.println("Error: API returned non-200 status");
-    }
-  } else {
-    Serial.print("Error sending request: ");
-    Serial.println(httpResponseCode);
-    Serial.println("Error description: " + http.errorToString(httpResponseCode));
-  }
-
-  http.end();
-}
-
-// Optional: NTP Time Configuration (for accurate timestamps)
-// Uncomment and configure if you need precise timestamps
-
-/*
-#include <time.h>
-
-const char* ntpServer = "pool.ntp.org";
-const long gmtOffset_sec = 0;  // Adjust for your timezone (e.g., 19800 for IST)
-const int daylightOffset_sec = 0;
-
-void setupNTP() {
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-  Serial.println("NTP configured");
-  
-  // Wait for time to be set
-  struct tm timeinfo;
-  while (!getLocalTime(&timeinfo)) {
-    delay(1000);
-    Serial.println("Waiting for NTP sync...");
-  }
-  
-  Serial.println("Time synchronized");
-}
-*/
-
+ #include <WiFi.h>
+ #include <HTTPClient.h>
+ #include <SPI.h>
+ #include <MFRC522.h>
+ #include <Wire.h>
+ #include "RTClib.h"
+ 
+ #define SS_PIN 5
+ #define RST_PIN 4
+ #define BUZZER_PIN 25
+ 
+ // WiFi credentials
+ const char* ssid = "Aarti_5G";
+ const char* password = "07071980";
+ 
+ // AWS API Gateway endpoint for entry logs
+ // Replace with your actual API Gateway URL (e.g., https://YOUR-API-ID.execute-api.us-east-1.amazonaws.com/prod/entry)
+ const char* API_GATEWAY_URL = "https://iz0fcerohk.execute-api.eu-north-1.amazonaws.com/prod/entry";
+ 
+ MFRC522 rfid(SS_PIN, RST_PIN);
+ RTC_DS3231 rtc;
+ 
+ void setup() {
+   Serial.begin(921600);
+   Serial.println("=== RFID Attendance System - AWS Integration ===");
+   Serial.println("Sends entry logs to AWS API Gateway /entry endpoint");
+   delay(200);
+ 
+   SPI.begin();
+   rfid.PCD_Init();
+ 
+   Wire.begin();
+   if (!rtc.begin()) {
+     Serial.println("Couldn't find RTC!");
+   }
+   if (rtc.lostPower()) {
+     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+   }
+ 
+   pinMode(BUZZER_PIN, OUTPUT);
+   digitalWrite(BUZZER_PIN, LOW);
+ 
+   Serial.print("Connecting to WiFi: ");
+   Serial.println(ssid);
+   WiFi.mode(WIFI_STA);
+   WiFi.begin(ssid, password);
+ 
+   unsigned long start = millis();
+   while (WiFi.status() != WL_CONNECTED) {
+     if (millis() - start > 20000) {
+       Serial.println("Failed to connect to WiFi (timeout). Continuing offline.");
+       break;
+     }
+     delay(500);
+     Serial.print(".");
+   }
+ 
+   if (WiFi.status() == WL_CONNECTED) {
+     Serial.println();
+     Serial.print("Connected, IP: ");
+     Serial.println(WiFi.localIP());
+   }
+   Serial.println("Ready to scan RFID...");
+ }
+ 
+ void loop() {
+   if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial()) {
+     delay(50);
+     return;
+   }
+ 
+   // Read RFID UID without spaces (format: A1B2C3D4)
+   String rfidUid = "";
+   for (byte i = 0; i < rfid.uid.size; i++) {
+     if (rfid.uid.uidByte[i] < 0x10) rfidUid += "0";
+     rfidUid += String(rfid.uid.uidByte[i], HEX);
+   }
+   rfidUid.toUpperCase();
+ 
+   Serial.print("Card detected. RFID UID: ");
+   Serial.println(rfidUid);
+ 
+   // Get current timestamp from RTC
+   DateTime now = rtc.now();
+   String timestamp = getISOTimestamp(now);
+   String date = getDateString(now);
+ 
+   Serial.printf("Timestamp: %s, Date: %s\n", timestamp.c_str(), date.c_str());
+ 
+   // Send entry log to AWS API Gateway
+   if (WiFi.status() == WL_CONNECTED) {
+     bool success = sendEntryLog(rfidUid, timestamp, date);
+     if (success) {
+       Serial.printf("✅ Entry log recorded successfully at %04d/%02d/%02d %02d:%02d:%02d\n",
+                     now.year(), now.month(), now.day(),
+                     now.hour(), now.minute(), now.second());
+       successTune();
+     } else {
+       Serial.printf("❌ Failed to record entry log at %04d/%02d/%02d %02d:%02d:%02d\n",
+                     now.year(), now.month(), now.day(),
+                     now.hour(), now.minute(), now.second());
+       failureTune();
+     }
+   } else {
+     Serial.println("❌ No WiFi connection. Cannot send entry log.");
+     Serial.println("Please connect to WiFi to use the attendance system.");
+     failureTune();
+   }
+ 
+   rfid.PICC_HaltA();
+   delay(1000); // Prevent duplicate scans
+ }
+ 
+ // --- SEND ENTRY LOG TO AWS API GATEWAY ---
+ bool sendEntryLog(const String &rfidUid, const String &timestamp, const String &date) {
+   HTTPClient http;
+   
+   // Prepare JSON payload
+   String jsonPayload = "{";
+   jsonPayload += "\"rfid_uid\":\"" + rfidUid + "\",";
+   jsonPayload += "\"timestamp\":\"" + timestamp + "\",";
+   jsonPayload += "\"date\":\"" + date + "\"";
+   jsonPayload += "}";
+ 
+   Serial.println("Sending entry log to API Gateway...");
+   Serial.println("URL: " + String(API_GATEWAY_URL));
+   Serial.println("Payload: " + jsonPayload);
+ 
+   if (http.begin(API_GATEWAY_URL)) {
+     http.addHeader("Content-Type", "application/json");
+     
+     int httpCode = http.POST(jsonPayload);
+     String response = "";
+     
+     if (httpCode > 0) {
+       response = http.getString();
+       Serial.printf("HTTP Response code: %d\n", httpCode);
+       Serial.println("Response: " + response);
+       
+       if (httpCode == 200) {
+         // Parse JSON response to check if it was successful
+         if (response.indexOf("\"message\"") >= 0 || response.indexOf("successfully") >= 0) {
+           http.end();
+           return true;
+         } else if (response.indexOf("\"error\"") >= 0) {
+           Serial.println("API returned error: " + response);
+           http.end();
+           return false;
+         }
+         http.end();
+         return true; // 200 status code means success
+       } else {
+         Serial.printf("HTTP Error: %d\n", httpCode);
+         http.end();
+         return false;
+       }
+     } else {
+       Serial.printf("HTTP POST failed, code: %d\n", httpCode);
+       Serial.println("Error: " + http.errorToString(httpCode));
+       http.end();
+       return false;
+     }
+   } else {
+     Serial.println("Failed to connect to API Gateway.");
+     return false;
+   }
+ }
+ 
+ // --- GENERATE ISO TIMESTAMP FROM RTC ---
+ String getISOTimestamp(DateTime dt) {
+   // Format: YYYY-MM-DDTHH:MM:SSZ (UTC format)
+   char timestamp[25];
+   sprintf(timestamp, "%04d-%02d-%02dT%02d:%02d:%02dZ",
+           dt.year(), dt.month(), dt.day(),
+           dt.hour(), dt.minute(), dt.second());
+   return String(timestamp);
+ }
+ 
+ // --- GENERATE DATE STRING ---
+ String getDateString(DateTime dt) {
+   // Format: YYYY-MM-DD
+   char date[11];
+   sprintf(date, "%04d-%02d-%02d",
+           dt.year(), dt.month(), dt.day());
+   return String(date);
+ }
+ 
+ // --- BUZZER TUNES ---
+ void successTune() {
+   for (int i = 0; i < 2; i++) {
+     digitalWrite(BUZZER_PIN, HIGH); delay(100);
+     digitalWrite(BUZZER_PIN, LOW); delay(60);
+   }
+   delay(80);
+   digitalWrite(BUZZER_PIN, HIGH); delay(280);
+   digitalWrite(BUZZER_PIN, LOW);
+ }
+ 
+ void failureTune() {
+   digitalWrite(BUZZER_PIN, HIGH); delay(420);
+   digitalWrite(BUZZER_PIN, LOW); delay(120);
+   digitalWrite(BUZZER_PIN, HIGH); delay(180);
+   digitalWrite(BUZZER_PIN, LOW);
+ }

@@ -1,235 +1,270 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { Button } from './ui/button'
+import { Input } from './ui/input'
+import { Skeleton } from './ui/skeleton'
+import { ArrowUpDown, Download, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { exportToCSV } from '@/utils/export'
+import { format } from 'date-fns'
+import { fadeIn, springTransition } from '@/utils/animations'
+import { cn } from '@/utils/cn'
 
-const AttendanceTable = ({ data }) => {
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
+export default function AttendanceTable({ data, loading = false, searchFilter = '' }) {
+  const navigate = useNavigate()
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' })
+  const [localSearchTerm, setLocalSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
+  
+  // Combine external search filter with local search
+  const searchTerm = searchFilter || localSearchTerm
 
   const handleSort = (key) => {
-    let direction = 'asc';
+    let direction = 'asc'
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
+      direction = 'desc'
     }
-    setSortConfig({ key, direction });
-  };
+    setSortConfig({ key, direction })
+  }
 
-  const sortedData = useMemo(() => {
-    if (!sortConfig.key) return data;
+  const filteredAndSortedData = useMemo(() => {
+    let result = [...(data || [])]
 
-    return [...data].sort((a, b) => {
-      const aValue = a[sortConfig.key];
-      const bValue = b[sortConfig.key];
+    // Search filter - search in student name, ID, and RFID
+    if (searchTerm) {
+      result = result.filter(item => {
+        const searchLower = searchTerm.toLowerCase()
+        return (
+          (item.student_name && item.student_name.toLowerCase().includes(searchLower)) ||
+          (item.student_id && item.student_id.toLowerCase().includes(searchLower)) ||
+          (item.rfid_uid && item.rfid_uid.toLowerCase().includes(searchLower))
+        )
+      })
+    }
 
-      if (aValue < bValue) {
-        return sortConfig.direction === 'asc' ? -1 : 1;
-      }
-      if (aValue > bValue) {
-        return sortConfig.direction === 'asc' ? 1 : -1;
-      }
-      return 0;
-    });
-  }, [data, sortConfig]);
+    // Sort
+    if (sortConfig.key) {
+      result.sort((a, b) => {
+        const aVal = a[sortConfig.key]
+        const bVal = b[sortConfig.key]
+        
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1
+        return 0
+      })
+    }
 
-  // Pagination
-  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedData = sortedData.slice(startIndex, startIndex + itemsPerPage);
+    return result
+  }, [data, searchTerm, sortConfig])
 
-  const getStatusBadgeClass = (status) => {
-    const classes = {
-      Present: 'bg-green-100 text-green-800',
-      Absent: 'bg-red-100 text-red-800',
-      Proxy: 'bg-yellow-100 text-yellow-800',
-      Bunk: 'bg-purple-100 text-purple-800',
-    };
-    return classes[status] || 'bg-gray-100 text-gray-800';
-  };
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    return filteredAndSortedData.slice(startIndex, startIndex + itemsPerPage)
+  }, [filteredAndSortedData, currentPage])
 
-  if (data.length === 0) {
+  const totalPages = Math.ceil(filteredAndSortedData.length / itemsPerPage)
+
+  const handleExport = () => {
+    exportToCSV(filteredAndSortedData, `attendance_${format(new Date(), 'yyyy-MM-dd')}.csv`)
+  }
+
+  const getStatusBadge = (status) => {
+    const colors = {
+      Present: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+      Absent: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+      Proxy: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+      Bunk: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+    }
+    return colors[status] || 'bg-gray-100 text-gray-800'
+  }
+
+  if (loading) {
     return (
-      <div className="text-center py-8 text-gray-500">
-        No attendance records found for the selected filters
-      </div>
-    );
+      <Card className="border-0 shadow-lg">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-6 w-40" />
+            <div className="flex gap-2">
+              <Skeleton className="h-9 w-32" />
+              <Skeleton className="h-9 w-24" />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {/* Table Header */}
+            <div className="grid grid-cols-7 gap-4 pb-2 border-b">
+              {Array.from({ length: 7 }).map((_, i) => (
+                <Skeleton key={i} className="h-4 w-full" />
+              ))}
+            </div>
+            {/* Table Rows */}
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} className="grid grid-cols-7 gap-4 py-3 border-b">
+                {Array.from({ length: 7 }).map((_, j) => (
+                  <Skeleton key={j} className="h-4 w-full" />
+                ))}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <Card className="border-0 shadow-lg">
+        <CardContent className="p-12">
+          <div className="text-center text-muted-foreground">
+            No attendance data available
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
-            <th
-              onClick={() => handleSort('student_id')}
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-            >
-              Student ID
-              {sortConfig.key === 'student_id' && (
-                <span className="ml-1">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+    <Card className="border-0 shadow-lg">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-xl font-bold">Attendance Records</CardTitle>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Quick search in table..."
+                value={localSearchTerm}
+                onChange={(e) => setLocalSearchTerm(e.target.value)}
+                className="pl-9 w-64"
+                disabled={!!searchFilter}
+              />
+              {searchFilter && (
+                <p className="absolute -bottom-5 left-0 text-xs text-muted-foreground">
+                  Using filter search
+                </p>
               )}
-            </th>
-            <th
-              onClick={() => handleSort('student_name')}
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-            >
-              Name
-              {sortConfig.key === 'student_name' && (
-                <span className="ml-1">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-              )}
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              RFID UID
-            </th>
-            <th
-              onClick={() => handleSort('year')}
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-            >
-              Year
-              {sortConfig.key === 'year' && (
-                <span className="ml-1">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-              )}
-            </th>
-            <th
-              onClick={() => handleSort('department')}
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-            >
-              Department
-              {sortConfig.key === 'department' && (
-                <span className="ml-1">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-              )}
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Division
-            </th>
-            <th
-              onClick={() => handleSort('date')}
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-            >
-              Date
-              {sortConfig.key === 'date' && (
-                <span className="ml-1">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-              )}
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Lecture
-            </th>
-            <th
-              onClick={() => handleSort('status')}
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-            >
-              Status
-              {sortConfig.key === 'status' && (
-                <span className="ml-1">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-              )}
-            </th>
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {paginatedData.map((record, index) => (
-            <tr key={record.attendance_id || index} className="hover:bg-gray-50">
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                {record.student_id}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                {record.student_name || 'Unknown'}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {record.rfid_uid}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {record.year}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {record.department}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {record.division}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {record.date}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {record.lecture}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <span
-                  className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeClass(
-                    record.status
-                  )}`}
-                >
-                  {record.status}
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 mt-4">
-          <div className="flex-1 flex justify-between sm:hidden">
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
-              className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-            >
-              Previous
-            </button>
-            <button
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
-              className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
-          <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm text-gray-700">
-                Showing <span className="font-medium">{startIndex + 1}</span> to{' '}
-                <span className="font-medium">
-                  {Math.min(startIndex + itemsPerPage, sortedData.length)}
-                </span>{' '}
-                of <span className="font-medium">{sortedData.length}</span> results
-              </p>
             </div>
-            <div>
-              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                <button
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                  className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Previous
-                </button>
-                {[...Array(totalPages)].map((_, i) => (
-                  <button
-                    key={i + 1}
-                    onClick={() => setCurrentPage(i + 1)}
-                    className={`relative inline-flex items-center px-4 py-2 border ${
-                      currentPage === i + 1
-                        ? 'z-10 bg-primary-50 border-primary-500 text-primary-600'
-                        : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                    } text-sm font-medium`}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
-                <button
-                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages}
-                  className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Next
-                </button>
-              </nav>
-            </div>
+            <Button onClick={handleExport} variant="outline" size="sm">
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
           </div>
         </div>
-      )}
-    </div>
-  );
-};
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left p-3 font-semibold">
+                  <button
+                    onClick={() => handleSort('student_id')}
+                    className="flex items-center gap-1 hover:text-primary"
+                  >
+                    Student ID
+                    <ArrowUpDown className="h-4 w-4" />
+                  </button>
+                </th>
+                <th className="text-left p-3 font-semibold">
+                  <button
+                    onClick={() => handleSort('student_name')}
+                    className="flex items-center gap-1 hover:text-primary"
+                  >
+                    Name
+                    <ArrowUpDown className="h-4 w-4" />
+                  </button>
+                </th>
+                <th className="text-left p-3 font-semibold">Date</th>
+                <th className="text-left p-3 font-semibold">Lecture</th>
+                <th className="text-left p-3 font-semibold">
+                  <button
+                    onClick={() => handleSort('status')}
+                    className="flex items-center gap-1 hover:text-primary"
+                  >
+                    Status
+                    <ArrowUpDown className="h-4 w-4" />
+                  </button>
+                </th>
+                <th className="text-left p-3 font-semibold">Department</th>
+                <th className="text-left p-3 font-semibold">Year</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedData.map((record, index) => (
+                <motion.tr 
+                  key={record.attendance_id || index} 
+                  className={cn(
+                    "border-b hover:bg-muted/50 transition-colors cursor-pointer",
+                    "hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                  )}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.03, ...springTransition }}
+                  whileHover={{ scale: 1.005, backgroundColor: "rgba(59, 130, 246, 0.1)" }}
+                  onClick={() => {
+                    if (record.student_id) {
+                      navigate(`/student/${record.student_id}`)
+                    }
+                  }}
+                  title={record.student_id ? `Click to view ${record.student_name || record.student_id}'s profile` : ''}
+                >
+                  <td className="p-3">{record.student_id}</td>
+                  <td className="p-3 font-medium">{record.student_name}</td>
+                  <td className="p-3">{record.date}</td>
+                  <td className="p-3">{record.lecture || '-'}</td>
+                  <td className="p-3">
+                    <motion.span 
+                      className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(record.status)}`}
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                    >
+                      {record.status}
+                    </motion.span>
+                  </td>
+                  <td className="p-3">{record.department || '-'}</td>
+                  <td className="p-3">{record.year || '-'}</td>
+                </motion.tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-export default AttendanceTable;
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4">
+            <div className="text-sm text-muted-foreground">
+              Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredAndSortedData.length)} of {filteredAndSortedData.length} results
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <div className="text-sm">
+                Page {currentPage} of {totalPages}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
 
