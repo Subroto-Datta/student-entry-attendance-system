@@ -10,7 +10,7 @@ import boto3
 import os
 import pandas as pd
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from botocore.exceptions import ClientError
 
@@ -72,7 +72,10 @@ def lambda_handler(event, context):
             # Extract date from filename or use today's date
             date = extract_date_from_filename(object_key)
             if not date:
-                date = datetime.now().strftime('%Y-%m-%d')
+                # Use IST date (UTC + 5.5 hours) for default date
+                utc_now = datetime.utcnow()
+                ist_now = utc_now + timedelta(hours=5, minutes=30)
+                date = ist_now.strftime('%Y-%m-%d')
                 print(f"WARNING: Could not extract date from filename '{object_key}', using today's date: {date}")
             else:
                 print(f"SUCCESS: Extracted date '{date}' from filename '{object_key}'")
@@ -80,7 +83,10 @@ def lambda_handler(event, context):
             # Extract lecture from filename or use default (must be done before using it)
             lecture = extract_lecture_from_filename(object_key)
             if not lecture:
-                lecture = f"Lecture_{datetime.now().strftime('%H:%M')}"
+                # Use IST time for lecture naming
+                utc_now = datetime.utcnow()
+                ist_now = utc_now + timedelta(hours=5, minutes=30)
+                lecture = f"Lecture_{ist_now.strftime('%H:%M')}"
             
             print(f"Processing attendance for date: {date}, lecture: {lecture}, file: {object_key}")
             

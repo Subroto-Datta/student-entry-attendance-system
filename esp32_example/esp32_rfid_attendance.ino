@@ -59,8 +59,8 @@
  #define BUZZER_PIN 25
  
  // WiFi credentials
- const char* ssid = "Aarti_5G";
- const char* password = "07071980";
+ const char* ssid = "AaryaB";
+ const char* password = "aarya1234";
  
  // AWS API Gateway endpoint for entry logs
  // Replace with your actual API Gateway URL (e.g., https://YOUR-API-ID.execute-api.us-east-1.amazonaws.com/prod/entry)
@@ -70,7 +70,7 @@
  RTC_DS3231 rtc;
  
  void setup() {
-   Serial.begin(921600);
+   Serial.begin(115200);
    Serial.println("=== RFID Attendance System - AWS Integration ===");
    Serial.println("Sends entry logs to AWS API Gateway /entry endpoint");
    delay(200);
@@ -215,24 +215,29 @@
    }
  }
  
- // --- GENERATE ISO TIMESTAMP FROM RTC ---
- String getISOTimestamp(DateTime dt) {
-   // Format: YYYY-MM-DDTHH:MM:SSZ (UTC format)
-   char timestamp[25];
-   sprintf(timestamp, "%04d-%02d-%02dT%02d:%02d:%02dZ",
-           dt.year(), dt.month(), dt.day(),
-           dt.hour(), dt.minute(), dt.second());
-   return String(timestamp);
- }
+// --- GENERATE ISO TIMESTAMP FROM RTC ---
+String getISOTimestamp(DateTime dt) {
+  // RTC is set to IST (UTC+5:30), so we need to convert to UTC for proper storage
+  // Subtract 5 hours and 30 minutes to get UTC time
+  DateTime utcTime = DateTime(dt.unixtime() - 19800); // 19800 seconds = 5.5 hours
+  
+  // Format: YYYY-MM-DDTHH:MM:SSZ (UTC format)
+  char timestamp[25];
+  sprintf(timestamp, "%04d-%02d-%02dT%02d:%02d:%02dZ",
+          utcTime.year(), utcTime.month(), utcTime.day(),
+          utcTime.hour(), utcTime.minute(), utcTime.second());
+  return String(timestamp);
+}
  
- // --- GENERATE DATE STRING ---
- String getDateString(DateTime dt) {
-   // Format: YYYY-MM-DD
-   char date[11];
-   sprintf(date, "%04d-%02d-%02d",
-           dt.year(), dt.month(), dt.day());
-   return String(date);
- }
+// --- GENERATE DATE STRING ---
+String getDateString(DateTime dt) {
+  // Use IST date (RTC is in IST)
+  // Format: YYYY-MM-DD
+  char date[11];
+  sprintf(date, "%04d-%02d-%02d",
+          dt.year(), dt.month(), dt.day());
+  return String(date);
+}
  
  // --- BUZZER TUNES ---
  void successTune() {

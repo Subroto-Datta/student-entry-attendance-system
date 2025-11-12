@@ -230,6 +230,29 @@ export default function LiveAttendance() {
         
         console.log('Filtered logs after all filters:', filteredLogs.length)
         
+        // Sort by timestamp (most recent first) after filtering
+        // Priority: created_at > timestamp > date
+        filteredLogs.sort((a, b) => {
+          const timeA = a.created_at || a.timestamp || a.date || ''
+          const timeB = b.created_at || b.timestamp || b.date || ''
+          
+          // Debug logging for first few entries
+          if (filteredLogs.indexOf(a) < 3) {
+            console.log(`Sorting entry ${a.student_id}: ${timeA}`)
+          }
+          
+          // Compare in reverse order (newest first)
+          return timeB.localeCompare(timeA)
+        })
+        
+        // Log first few entries after sorting
+        if (filteredLogs.length > 0) {
+          console.log('First 3 entries after sorting:')
+          filteredLogs.slice(0, 3).forEach((entry, idx) => {
+            console.log(`  ${idx + 1}. ${entry.student_id} at ${entry.created_at || entry.timestamp || entry.date}`)
+          })
+        }
+        
         // Set entries and stats
         setEntries(filteredLogs)
         

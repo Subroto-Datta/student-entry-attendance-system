@@ -1,7 +1,7 @@
 import { format, formatDistanceToNow } from 'date-fns'
 
-// IST offset: +5 hours 30 minutes = 19800000 milliseconds
-export const IST_OFFSET_MS = 6.5 * 60 * 60 * 1000
+// IST timezone string
+export const IST_TIMEZONE = 'Asia/Kolkata'
 
 /**
  * Convert UTC timestamp to IST and format it
@@ -13,8 +13,15 @@ export const formatToIST = (timestamp, formatStr = 'MMM dd, HH:mm:ss') => {
   if (!timestamp) return 'N/A'
   
   try {
-    // Parse the timestamp to a Date object (assumes UTC)
-    const utcDate = new Date(timestamp)
+    // Parse the timestamp to a Date object (treats as UTC)
+    let utcDate
+    if (typeof timestamp === 'string') {
+      // Ensure UTC by appending 'Z' if not present
+      const utcTimestamp = timestamp.endsWith('Z') ? timestamp : timestamp + 'Z'
+      utcDate = new Date(utcTimestamp)
+    } else {
+      utcDate = new Date(timestamp)
+    }
     
     // Check if date is valid
     if (isNaN(utcDate.getTime())) {
@@ -22,10 +29,22 @@ export const formatToIST = (timestamp, formatStr = 'MMM dd, HH:mm:ss') => {
       return 'Invalid Date'
     }
     
-    // Convert UTC to IST by adding offset
-    const istDate = new Date(utcDate.getTime() + IST_OFFSET_MS)
+    // Get IST time by using toLocaleString with IST timezone
+    const istString = utcDate.toLocaleString('en-US', { 
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    })
     
-    // Format the date
+    // Parse the IST string back to a Date object for formatting
+    const istDate = new Date(istString)
+    
+    // Format the date using date-fns
     return format(istDate, formatStr)
   } catch (error) {
     console.error('Error formatting timestamp to IST:', error, timestamp)
@@ -42,7 +61,15 @@ export const getTimeAgoIST = (timestamp) => {
   if (!timestamp) return 'Unknown'
   
   try {
-    const utcDate = new Date(timestamp)
+    // Parse the timestamp to a Date object
+    let utcDate
+    if (typeof timestamp === 'string') {
+      // Ensure UTC by appending 'Z' if not present
+      const utcTimestamp = timestamp.endsWith('Z') ? timestamp : timestamp + 'Z'
+      utcDate = new Date(utcTimestamp)
+    } else {
+      utcDate = new Date(timestamp)
+    }
     
     // Check if date is valid
     if (isNaN(utcDate.getTime())) {
@@ -50,15 +77,9 @@ export const getTimeAgoIST = (timestamp) => {
       return 'Unknown'
     }
     
-    // Convert to IST by adding offset
-    const istDate = new Date(utcDate.getTime() + IST_OFFSET_MS)
-    
-    // Get current IST time
-    const nowUTC = new Date()
-    const nowIST = new Date(nowUTC.getTime() + IST_OFFSET_MS)
-    
-    // Calculate relative time from IST perspective
-    return formatDistanceToNow(istDate, { addSuffix: true })
+    // Use formatDistanceToNow with the UTC date
+    // It will correctly calculate the relative time
+    return formatDistanceToNow(utcDate, { addSuffix: true })
   } catch (error) {
     console.error('Error getting relative time:', error)
     return 'Unknown'
@@ -74,12 +95,31 @@ export const convertToIST = (timestamp) => {
   if (!timestamp) return null
   
   try {
-    const utcDate = new Date(timestamp)
+    let utcDate
+    if (typeof timestamp === 'string') {
+      const utcTimestamp = timestamp.endsWith('Z') ? timestamp : timestamp + 'Z'
+      utcDate = new Date(utcTimestamp)
+    } else {
+      utcDate = new Date(timestamp)
+    }
+    
     if (isNaN(utcDate.getTime())) {
       return null
     }
-    // Add IST offset to UTC time
-    return new Date(utcDate.getTime() + IST_OFFSET_MS)
+    
+    // Convert to IST using toLocaleString
+    const istString = utcDate.toLocaleString('en-US', { 
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    })
+    
+    return new Date(istString)
   } catch (error) {
     console.error('Error converting to IST:', error)
     return null
@@ -91,8 +131,18 @@ export const convertToIST = (timestamp) => {
  * @returns {Date} Current time in IST
  */
 export const getCurrentIST = () => {
-  const nowUTC = new Date()
-  return new Date(nowUTC.getTime() + IST_OFFSET_MS)
+  const now = new Date()
+  const istString = now.toLocaleString('en-US', { 
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
+  return new Date(istString)
 }
 
 /**
@@ -104,12 +154,31 @@ export const formatToISTFull = (timestamp) => {
   if (!timestamp) return 'N/A'
   
   try {
-    const utcDate = new Date(timestamp)
+    let utcDate
+    if (typeof timestamp === 'string') {
+      const utcTimestamp = timestamp.endsWith('Z') ? timestamp : timestamp + 'Z'
+      utcDate = new Date(utcTimestamp)
+    } else {
+      utcDate = new Date(timestamp)
+    }
+    
     if (isNaN(utcDate.getTime())) {
       return 'Invalid Date'
     }
     
-    const istDate = new Date(utcDate.getTime() + IST_OFFSET_MS)
+    // Convert to IST
+    const istString = utcDate.toLocaleString('en-US', { 
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    })
+    
+    const istDate = new Date(istString)
     return format(istDate, 'MMM dd, yyyy HH:mm:ss') + ' IST'
   } catch (error) {
     console.error('Error formatting full IST:', error)

@@ -60,18 +60,25 @@ def lambda_handler(event, context):
         else:
             # Date range provided - use it
             if not end_date:
-                end_date = datetime.now().strftime('%Y-%m-%d')
+                # Use IST date (UTC + 5.5 hours)
+                utc_now = datetime.utcnow()
+                ist_now = utc_now + timedelta(hours=5, minutes=30)
+                end_date = ist_now.strftime('%Y-%m-%d')
             if not start_date:
+                # Use IST for date calculations
+                utc_now = datetime.utcnow()
+                ist_now = utc_now + timedelta(hours=5, minutes=30)
+                
                 if period == 'daily':
                     start_date = end_date
                 elif period == 'weekly':
-                    start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+                    start_date = (ist_now - timedelta(days=7)).strftime('%Y-%m-%d')
                 elif period == 'monthly':
-                    start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+                    start_date = (ist_now - timedelta(days=30)).strftime('%Y-%m-%d')
                 elif period == 'semester':
-                    start_date = (datetime.now() - timedelta(days=180)).strftime('%Y-%m-%d')
+                    start_date = (ist_now - timedelta(days=180)).strftime('%Y-%m-%d')
                 else:
-                    start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+                    start_date = (ist_now - timedelta(days=30)).strftime('%Y-%m-%d')
             
             print(f"Fetching analytics for date range: {start_date} to {end_date}")
             # Fetch attendance records

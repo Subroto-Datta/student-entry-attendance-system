@@ -49,16 +49,21 @@ def lambda_handler(event, context):
         
         print(f"Received query params: {query_params}")
         
-        # Set default date range if not provided
+        # Set default date range if not provided (using UTC, will be converted to IST in frontend)
+        # Convert UTC to IST by adding 5.5 hours for date calculations
+        utc_now = datetime.utcnow()
+        ist_offset = timedelta(hours=5, minutes=30)
+        now_ist = utc_now + ist_offset
+        
         if not end_date:
-            end_date = datetime.now().strftime('%Y-%m-%d')
+            end_date = now_ist.strftime('%Y-%m-%d')
         if not start_date:
             if date:
                 start_date = date
                 end_date = date
             else:
                 # Default to last 90 days to be more inclusive
-                start_date = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+                start_date = (now_ist - timedelta(days=90)).strftime('%Y-%m-%d')
         
         print(f"Date range: {start_date} to {end_date}")
         
@@ -112,8 +117,19 @@ def lambda_handler(event, context):
         
         print(f"Enriched {len(enriched_logs)} logs ({(logs_without_student)} without student info)")
         
-        # Sort by timestamp (most recent first)
-        enriched_logs.sort(key=lambda x: x.get('timestamp') or x.get('created_at') or '', reverse=True)
+        # Sort by timestamp (most recent first) - use created_at as primary, then timestamp
+        def get_sort_key(log):
+            # Priority: created_at > timestamp > date
+            # Return empty string for missing values (will sort last)
+            return log.get('created_at') or log.get('timestamp') or log.get('date') or ''
+        
+        enriched_logs.sort(key=get_sort_key, reverse=True)
+        
+        # Debug: Print first few entries to verify sorting
+        if enriched_logs:
+            print(f"First entry after sorting: {enriched_logs[0].get('student_id')} at {enriched_logs[0].get('created_at') or enriched_logs[0].get('timestamp')}")
+            if len(enriched_logs) > 1:
+                print(f"Second entry after sorting: {enriched_logs[1].get('student_id')} at {enriched_logs[1].get('created_at') or enriched_logs[1].get('timestamp')}")
         
         # Apply limit
         enriched_logs = enriched_logs[:limit]
